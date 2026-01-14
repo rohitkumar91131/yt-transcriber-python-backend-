@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+# Note: Hum naye tarike se import kar rahe hain
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled, NoTranscriptFound
 import re
 
@@ -21,7 +22,7 @@ def extract_video_id(url):
 
 @app.route('/', methods=['GET'])
 def home():
-    return "<h1>YT Transcriber is Live! 🚀</h1>"
+    return "<h1>YT Transcriber API is Live! (v2.0) 🚀</h1>"
 
 @app.route('/transcribe', methods=['POST'])
 def transcribe_video():
@@ -29,25 +30,38 @@ def transcribe_video():
     video_url = data.get('url')
 
     if not video_url:
-        return jsonify({"error": "Bhai URL toh bhejo!"}), 400
+        return jsonify({"error": "URL missing"}), 400
 
     video_id = extract_video_id(video_url)
     if not video_id:
         return jsonify({"error": "Invalid YouTube URL"}), 400
 
     try:
-        transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['en', 'hi'])
+        # 👇 MAGIC FIX: Naye version mein hume Pehle Class banani padti hai, fir fetch call karte hain
+        transcript_manager = YouTubeTranscriptApi()
+        transcript_list = transcript_manager.fetch(video_id, languages=['en', 'hi'])
+        
         full_text = " ".join([item['text'] for item in transcript_list])
         clean_text = full_text.replace('\n', ' ')
+        
         return jsonify({"transcript": clean_text})
 
+    except AttributeError:
+        # Fallback: Agar kismat se purana version install hua ho
+        try:
+             transcript_list = YouTubeTranscriptApi.get_transcript(video_id, languages=['en', 'hi'])
+             full_text = " ".join([item['text'] for item in transcript_list])
+             clean_text = full_text.replace('\n', ' ')
+             return jsonify({"transcript": clean_text})
+        except:
+             return jsonify({"error": "Library Version Mismatch. Contact Admin."}), 500
+
     except TranscriptsDisabled:
-        return jsonify({"error": "Subtitles disabled hain."}), 404
+        return jsonify({"error": "Subtitles are disabled for this video."}), 404
     except NoTranscriptFound:
-        return jsonify({"error": "English/Hindi transcript nahi mila."}), 404
+        return jsonify({"error": "No transcript found in English/Hindi."}), 404
     except Exception as e:
-        print(f"Error: {e}")
-        return jsonify({"error": "Server Error. Shayad video private hai."}), 500
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
